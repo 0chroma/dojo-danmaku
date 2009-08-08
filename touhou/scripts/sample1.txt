@@ -1,0 +1,273 @@
+#TouhouDanmakufu
+#Title[Human Realm Sword "Delusion of Enlightenment -Easy-"]
+#Text[PCB Stage 5: Clone of the Youmu's spell card]
+#Image[.\img\Danmakufu_sample01.png]
+#Player[FREE]
+#ScriptVersion[2]
+
+script_enemy_main {
+    let Name        = "Human Realm Sword "\""Delusion of Enlightenment -Easy-"\";
+    let ImgBoss     = "script\img\ExRumia.png";
+
+    // initial position
+    let XIni        = GetClipMaxX - 32;
+    let YIni        = GetClipMaxY - 32;
+
+    // the last position after slashing
+    let XSlash      = GetClipMinX + 32;
+    let YSlash      = YIni;
+
+    // starting position of the downward attack
+    let XStart      = GetClipMinX + 48;
+    let YStart      = GetClipMinY + 96;
+
+    // laser position
+    let XLaserBegin = GetClipMaxX + 32;
+    let XLaserEnd   = GetClipMinX - 32;
+    let YLaser      = GetClipMaxY - 16;
+
+    @Initialize {
+        SetLife(2000);
+        SetTimer(66);
+        SetScore(4000000);
+        SetDamageRate(5, 5);
+
+        LoadGraphic(ImgBoss);
+        SetTexture(ImgBoss);
+        setGraphicStop;
+
+        CutIn(YOUMU, Name, "", 0, 0, 0, 0);
+
+        TMain;
+    }
+
+    @MainLoop {
+        SetCollisionA(GetX, GetY, 32);
+        SetCollisionB(GetX, GetY, 16);
+        yield;
+    }
+
+    @DrawLoop {
+        DrawGraphic(GetX, GetY);
+    }
+
+    @Finalize {
+        DeleteGraphic(ImgBoss);
+
+        loop(24) {
+            let x = GetX + rand(-64, 64);
+            let y = GetY + rand(-64, 64);
+            CreateItem(ITEM_SCORE, x, y);
+        }
+    }
+
+    // main task
+    task TMain {
+        yield;
+
+        // prepare
+        appear;
+        levitate;
+        concentrate;
+        slash;
+        ready;
+
+        // background shots from bottom up
+        TFireToAir;
+
+        loop {
+            move;
+            fire;
+        }
+    }
+
+    // go to the initial position
+    sub appear {
+        let wIni = 120;
+
+        SetMovePosition02(XIni, YIni, wIni);
+        setGraphicMove;
+
+        SetInvincibility(wIni);
+        wait(wIni);
+    }
+
+    // levitate little bit
+    sub levitate {
+        let wLev = 60;
+
+        setGraphicStop;
+        SetMovePosition02(XIni, YIni + 10, wLev);
+        wait(wLev);
+        SetMovePosition02(XIni, YIni, wLev);
+        wait(wLev);
+    }
+
+    // concentrate the power
+    sub concentrate {
+        let wConc = 60;
+
+        setGraphicPose;
+        Concentration01(wConc);
+        wait(wConc);
+    }
+
+    // slash
+    sub slash {
+        let id       = 0;
+        let wMove    = 10;
+        let wStop    = 60 - wMove;
+
+        // interval to lengthen the laser
+        let interval = (XLaserBegin - XLaserEnd) / wMove;
+
+        CreateLaserA(id, XLaserBegin, YLaser, 0, 10, BLUE01, 0);
+        SetLaserDataA(id, 0, 180, 0, interval, 0, 0);
+        SetLaserDataA(id, wMove, NULL, 0, 0, 0, 0);
+        FireShot(id);
+
+        SetMovePosition02(XSlash, YSlash, wMove);
+        setGraphicMove;
+        wait(wMove);
+        wait(wStop);
+    }
+
+    // go to the starting position and ready to attack
+    sub ready {
+        let wMove = 120;
+        let wStop = 60;
+
+        SetMovePosition02(XStart, YStart, wMove);
+        setGraphicMove;
+        wait(wMove);
+
+        setGraphicStop;
+        wait(wStop);
+
+        SetDamageRate(40, 40);
+    }
+
+    // fire bullets to the air
+    task TFireToAir {
+        let wFire = 8;    // firing interval
+
+        loop {
+            CreateShot01(rand(GetClipMinX, GetClipMaxX),
+                         YLaser, 1, rand(-92, -88), BLUE11, wFire);
+            wait(wFire);
+        }
+    }
+
+    // move
+    sub move {
+        let wMove = 60;
+
+        moveToPlayer(rand(40, 80), rand(-40, 40), wMove,
+                     GetClipMinX + 48, GetClipMinY +  32,
+                     GetClipMaxX - 48, GetClipMinY + 128);
+        setGraphicMove;
+        wait(wMove);
+    }
+
+    // fire the 3-way shots
+    sub fire {
+        let base     = GetAngleToPlayer;      // base direction
+        let interval = 36;                    // interval of the 3-way aiming shot
+        let nShot    = 7;                     // number of the shots
+        let wFire    = 5;                     // firing interval
+        let delay    = wFire * nShot;         // delay frames
+        let wBefore  = 60 - delay;            // waiting frames before firing
+        let v        = 1.5;                   // velocity
+
+        setGraphicPose;
+        wait(wBefore);
+
+        loop(nShot) {
+            nway(v, base + 180, 6, 30, delay);
+            nway(v, base, 3, interval, delay);
+            wait(wFire);
+
+            // adjust the parameters
+            interval += 1;
+            v       -= 0.15;
+            delay   -= wFire;
+        }
+    }
+
+    // fire n-way shot
+    //     v       : velocity
+    //     base    : base direction
+    //     way     : number of the ways
+    //     interval: interval between the shots (in degrees)
+    //     delay   : delay frames
+    function nway(v, base, way, interval, delay) {
+        let dir = base - (way - 1) / 2 * interval;    // direction
+
+        loop(way) {
+            CreateShot01(GetX, GetY, v, dir, RED02, delay);
+            dir += interval;
+        }
+    }
+
+    // move in the direction of the player's character if possible
+    //     xDist : x-distance (positive)
+    //     yDist : y-distance
+    //     frames: frames
+    //     left  : range of movement
+    //     top   :
+    //     right :
+    //     bottom:
+    function moveToPlayer(xDist, yDist, frames, left, top, right, bottom) {
+        let x;
+        let y;
+
+        if(GetPlayerX < GetX) {
+            // move left when the enemy is to the right of the player's character
+            x = GetX - xDist;
+
+            // however, move right when the enemy is going out of the range of movement
+            if(x < left) {
+                x = GetX + xDist;
+            }
+        } else {
+            // move right otherwise
+            x = GetX + xDist;
+
+            // however, move left when the enemy is going out of the range of movement
+            if(right < x) {
+                x = GetX - xDist;
+            }
+        }
+
+        y = GetY + yDist;
+
+        // stop at the edge when the enemy is going out of the range of movement
+        if(y < top) {
+            y = top;
+        } else if(bottom < y) {
+            y = bottom;
+        }
+
+        SetMovePosition02(x, y, frames);
+    }
+
+    // set the graphic region
+    sub setGraphicStop  { SetGraphicRect(  0,   0,  64,  64); }    // stopping
+    sub setGraphicPose  { SetGraphicRect( 64,   0, 128,  64); }    // special pose
+    sub setGraphicLeft  { SetGraphicRect(128,   0, 192,  64); }    // move left
+    sub setGraphicRight { SetGraphicRect(192,   0, 256,  64); }    // move right
+
+    // set the graphic region according to the moving direction
+    sub setGraphicMove {
+        if(GetSpeedX < 0) {
+            setGraphicLeft;
+        } else {
+            setGraphicRight;
+        }
+    }
+
+    // wait for w frames
+    function wait(w) {
+        loop(w) { yield; }
+    }
+}
